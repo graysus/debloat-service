@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"os/user"
 	"path"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -49,13 +51,13 @@ func SlowPrint(param string) {
 	for _, i := range param {
 		// minMS describes the minimum amount of time to type the character
 		// rangeMS describes the maximum amount of time added to this minimum value
-		minMS, rangeMS := 12, 100
+		minMS, rangeMS := 17, 80
 		if lastChar == ' ' {
 			// If last character was a space, refocus on the keys
 			minMS, rangeMS = 100, 75
 		} else if lastChar != '-' && i == '-' {
 			// Same with the hyphen
-			minMS, rangeMS = 125, 50
+			minMS, rangeMS = 75, 50
 		}
 
 		// Calculate and wait for delay
@@ -70,6 +72,7 @@ func SlowPrint(param string) {
 // Executes the remove command
 func RecurseOver(dir string) {
 	// Stat the path so we can see what it is.
+	time.Sleep(time.Millisecond)
 	stat, err := os.Lstat(dir)
 
 	switch {
@@ -80,6 +83,9 @@ func RecurseOver(dir string) {
 	// If it's a directory, recurse over its children and delete them as well.
 	case stat.IsDir():
 		listing, err := os.ReadDir(dir)
+		slices.SortFunc(listing, func(a, b os.DirEntry) int {
+			return strings.Compare(a.Name(), b.Name())
+		})
 		if err != nil {
 			fmt.Printf("rm: cannot remove %s: %s\n", dir, err)
 			return
@@ -117,7 +123,7 @@ func main() {
 
 	// catch SIGINT
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		<-c
 		// upon SIGINT, restore the screen and exit
