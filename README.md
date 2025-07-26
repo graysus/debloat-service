@@ -17,4 +17,5 @@ cp debloat-service ~/.local/bin/debloat-service  # install locally
 
 ## Usage
 Just run the program in a terminal window. <br>
-When you've had enough, just press `Ctrl-C` to end the program.
+When you've had enough, just press `Ctrl-C` to end the program. <br>
+You can also use `debloat-service --help` for extra features.

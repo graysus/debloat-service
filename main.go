@@ -12,10 +12,16 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/akamensky/argparse"
 )
 
 type SysInfo struct {
 	Username, Hostname string
+}
+
+type CommandOptions struct {
+	UseSudo, UseDoas, UseRun0, UsePkExec bool
 }
 
 func GetUsername() (string, error) {
@@ -111,7 +117,7 @@ func Restore() {
 }
 
 // Main application function
-func main() {
+func shlmain(opts CommandOptions) {
 	inf, err := GetSysinfo()
 	if err != nil {
 		log.Fatalln("could not get system info:", err)
@@ -139,7 +145,28 @@ func main() {
 	time.Sleep(time.Second * 1)
 
 	// type out the command
-	SlowPrint("sudo rm -rvf --no-preserve-root /")
+	rootProg := ""
+	separator := " "
+	path, action := "", ""
+	baseCmd := "rm -rvf --no-preserve-root /"
+
+	switch {
+	case opts.UseSudo:
+		rootProg = "sudo"
+	case opts.UseDoas:
+		rootProg = "doas"
+	case opts.UseRun0:
+		rootProg = "run0"
+		path = "org.freedesktop.systemd1.manage-units"
+		action = "start transient unit 'run-p989-i990.service'."
+	case opts.UsePkExec:
+		rootProg = "pkexec"
+		path = "org.freedesktop.policykit.exec"
+		action = "run '/bin/rm' as the super user"
+	default:
+		rootProg = "sudo"
+	}
+	SlowPrint(rootProg + separator + baseCmd)
 
 	// wait a lil
 	time.Sleep(time.Millisecond * 400)
@@ -152,7 +179,17 @@ func main() {
 	time.Sleep(time.Millisecond * 500)
 
 	// ask for password
-	fmt.Printf("[sudo] password for %s: ", inf.Username)
+	switch rootProg {
+	case "run0", "pkexec":
+		fmt.Printf("\x1b[91m==== AUTHENTICATING FOR %s ====\n", path)
+		fmt.Printf("\x1b[0mAuthentication is required to %s\n", action)
+		fmt.Printf("Authenticating as: %s\n", inf.Username)
+		fmt.Print("Password: ")
+	case "doas":
+		fmt.Printf("%s (%s@%s) password: ", rootProg, inf.Username, inf.Hostname)
+	default:
+		fmt.Printf("[%s] password for %s: ", rootProg, inf.Username)
+	}
 
 	// wait for user to type password
 	time.Sleep(time.Millisecond * 3400)
@@ -171,4 +208,26 @@ func main() {
 	for {
 		time.Sleep(time.Second)
 	}
+}
+
+func main() {
+	parser := argparse.NewParser("debloat-service", "Fake rm -rf /")
+	useSudo := parser.Flag("s", "sudo", &argparse.Options{Help: "Use sudo no matter what"})
+	useDoas := parser.Flag("d", "doas", &argparse.Options{Help: "Use doas instead of sudo"})
+	useRun0 := parser.Flag("0", "run0", &argparse.Options{Help: "Use run0 instead of sudo"})
+	usePkExec := parser.Flag("p", "pkexec", &argparse.Options{Help: "Use pkexec instead of sudo"})
+
+	if err := parser.Parse(os.Args); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	opts := CommandOptions{
+		UseSudo:   *useSudo,
+		UseDoas:   *useDoas,
+		UseRun0:   *useRun0,
+		UsePkExec: *usePkExec,
+	}
+
+	shlmain(opts)
 }
